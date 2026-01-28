@@ -2,13 +2,15 @@
 
 ## Nexus Repository Manager
 
-The JPS package deploys [Nexus Repository Manager](http://www.sonatype.org/) that initially contains 1 application server. 
+The JPS package deploys [Nexus Repository Manager](http://www.sonatype.org/) with PostgreSQL database support.
 
 ### Highlights
 This package is designed to deploy Nexus Repository Manager environment, a free repository manager with universal support for popular component formats:  
 
   -  Basic component intelligence
-  -  Supports Maven, Docker, NuGet, npm, PyPI, Bower, and more<br />
+  -  Supports Maven, Docker, NuGet, npm, PyPI, and more<br />
+  -  Uses PostgreSQL database<br />
+  -  Java 17 support<br />
   
 Nexus Repository Manager sets the standard for repository management providing development teams with the ability to proxy remote repositories and share software artifacts.
 
@@ -22,13 +24,17 @@ Nexus Repository Manager sets the standard for repository management providing d
 Layer                |     Server    | Number of CTs <br/> by default | Cloudlets per CT <br/> (reserved/dynamic) | Options
 -------------------- | --------------| :----------------------------: | :---------------------------------------: | :-----:
 AS                   | NGINX PHP |       1                        |           1 / 32                          | -
+DB                   | PostgreSQL   |       1                        |           1 / 16                          | -
 
 * AS - Application server 
+* DB - Database server
 * CT - Container
 
-**Nexus Repository Manager**: OSS 3.30.1-01<br/>
+**Nexus Repository Manager**: OSS 3.70.0<br/>
+**Database**: PostgreSQL<br/>
 **NGINX Version**: 1.18.0<br/>
 **PHP Engine Version**: 8<br/>
+**Java Version**: 17 (OpenJDK)<br/>
 
 ### Deployment
 

@@ -2,13 +2,16 @@ type: install
 version: 0.2
 id: nexus
 name: Nexus Repository Manager
-baseUrl: https://raw.githubusercontent.com/jelastic-jps/nexus/master/
+baseUrl: https://raw.githubusercontent.com/jelastic-jps/sych74/master/
 logo: images/Nexus.png
 homepage: https://www.sonatype.com/products/repository-oss
 description: Nexus Repository OSS is an open source repository that supports many
   artifact formats, including Docker, Java and npm. With the Nexus tool integration,
   pipelines in your toolchain can publish and retrieve versioned apps and their dependencies
   by using central repositories that are accessible from other environments.
+
+mixins:
+  - configs/vers.yaml
 
 categories:
 - apps/dev-tools
@@ -19,24 +22,33 @@ nodes:
 - cloudlets: 32
   fixedCloudlets: 1
   nodeType: nginxphp
+  displayName: Nexus Server
+- cloudlets: 16
+  nodeType: postgresql
+  displayName: Database Server
+  nodeGroup: sqldb
 
 onInstall:
+- setup-postgresql
 - install-nexus
+- setup-postgresql-connection
 - setup-nginx
 - installAddon:
     id: update-nexus
     nodeGroup: cp
 
 actions:
+  setup-postgresql:
+  - cmd[${nodes.sqldb.master.id}]: 
+      psql -Uwebadmin postgres -c "CREATE DATABASE nexus WITH ENCODING 'UNICODE' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0;"
   install-nexus:
   - cmd[cp]: |-
       wget -P /etc/yum.repos.d/ https://repo.sonatype.com/repository/community-hosted/rpm/sonatype-community.repo &>> /var/log/run.log
       if grep -a 'AlmaLinux' /etc/system-release ; then
-        dnf -y install nexus-repository-manager-3.68.1_02 java-17-openjdk-headless --nogpgcheck &>> /var/log/run.log
+        dnf -y install nexus-repository-manager-${globals.version_nexus} java-17-openjdk-headless --nogpgcheck &>> /var/log/run.log
         update-alternatives --remove-all  java-1.8.0-openjdk.x86_64 &>> /var/log/run.log
-        systemctl restart nexus-repository-manager.service
       else
-        yum -y install nexus-repository-manager-3.68.1_02 --nogpgcheck &>> /var/log/run.log
+        yum -y install nexus-repository-manager-${globals.version_nexus} --nogpgcheck &>> /var/log/run.log
         wget https://download.java.net/java/GA/jdk17.0.2/dfd4a8d0985749f896bed50d7138ee7f/8/GPL/openjdk-17.0.2_linux-x64_bin.tar.gz
         tar xf openjdk-17.0.2_linux-x64_bin.tar.gz
         rm -f  openjdk-17.0.2_linux-x64_bin.tar.gz
@@ -45,7 +57,6 @@ actions:
         echo 'export PATH=$PATH:$JAVA_HOME/bin' >>/etc/profile.d/jdk17.sh
         echo /opt/jdk-17.0.2 >> /etc/jelastic/redeploy.conf
         ln -sf /opt/jdk-17.0.2/bin/java /etc/alternatives/java
-        systemctl restart nexus-repository-manager.service
       fi
       echo /opt/sonatype/ >> /etc/jelastic/redeploy.conf
       until [[ -f /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties ]] ; do
@@ -55,7 +66,24 @@ actions:
       chmod 664 /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
       usermod -a -G nexus3 jelastic
     user: root
-    sayYes: true
+  setup-postgresql-connection:
+  - cmd[cp]: |-
+      until [[ -f /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties ]] ; do
+          sleep 1
+          echo '.'
+      done
+      cat >> /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties <<EOF
+
+# PostgreSQL Database Configuration
+nexus.datastore.enabled=true
+nexus.datastore.connectionUrl=jdbc:postgresql://sqldb:5432/nexus
+nexus.datastore.username=${nodes.sqldb.user}
+nexus.datastore.password=${nodes.sqldb.password}
+nexus.datastore.maximumPoolSize=10
+EOF
+      chown nexus3:nexus3 /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
+      chmod 664 /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
+    user: root
   setup-nginx:
   - cmd[cp]: |-
       sed -i 's|index  index.html index.htm index.php;|index  index.html index.htm index.php;\n\n    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;|g' /etc/nginx/conf.d/sites-enabled/default.conf
@@ -65,7 +93,6 @@ actions:
       sed -i 's|\#\s*application-host=.*|application-host=127.0.0.1|' /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
       chown nexus3:nexus3 /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
     user: root
-    sayYes: true
   - api [cp]: jelastic.environment.control.RestartNodes
   - cmd [cp]: sleep 15
 

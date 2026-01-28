@@ -3,7 +3,8 @@ name: Nexus Server Upgrade
 logo: https://raw.githubusercontent.com/jelastic-jps/nexus/master/images/Nexus.png
 
 description: |
-  This Addon allows you to upgrade Nexus.
+  This Addon allows you to upgrade Nexus Repository Manager.
+  Supports PostgreSQL database configuration (Nexus 3.70+).
 
 targetNodes:
   nodeGroup: [cp]
@@ -38,4 +39,4 @@ actions:
     - api [cp]: jelastic.environment.control.RestartNodes 
 
 success:
-  text: Nexus has been updated
+  text: Nexus has been updated successfully. PostgreSQL database connection is preserved.
