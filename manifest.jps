@@ -60,37 +60,26 @@ actions:
         }
       fi
     user: root
+  
   install-nexus:
   - cmd[cp]: |-
-      NEXUS_VERSION="${globals.version_nexus}"
-      NEXUS_TAR="nexus-${NEXUS_VERSION}-linux-x86_64.tar.gz"
-      cd /tmp
-      wget https://download.sonatype.com/nexus/3/${NEXUS_TAR} -O ${NEXUS_TAR} &>> /var/log/run.log
-      if [[ -f ${NEXUS_TAR} ]] ; then
-        cd /opt
-        tar xzf /tmp/${NEXUS_TAR} &>> /var/log/run.log
-        rm -f /tmp/${NEXUS_TAR}
-        NEXUS_DIR=$(ls -d nexus-* | head -n 1)
-        if [[ -n "${NEXUS_DIR}" ]] ; then
-          mv ${NEXUS_DIR} sonatype
-          chown -R jelastic:jelastic /opt/sonatype/nexus
-          chown -R jelastic:jelastic /opt/sonatype/sonatype-work
-        fi
-      fi
+      mkdir -p /opt/sonatype && chown -R jelastic /opt/sonatype
       echo /opt/sonatype/ >> /etc/jelastic/redeploy.conf
-      until [[ -f /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties ]] ; do
-          sleep 1
-          echo '.'
-      done
-      chmod 664 /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
+      NEXUS_TAR="nexus-${globals.version_nexus}-linux-x86_64.tar.gz"
+      wget https://download.sonatype.com/nexus/3/${NEXUS_TAR} -O /tmp/${NEXUS_TAR} &>> /var/log/run.log
+      cd /opt/sonatype
+      tar xzf /tmp/${NEXUS_TAR} &>> /var/log/run.log
+      NEXUS_DIR=$(ls -d nexus-* | head -n 1)
+      ln -s /opt/sonatype/$NEXUS_DIR /opt/sonatype/nexus
+      wget /scripts/nexus.service -O /etc/systemd/system/nexus.service
+      systemctl daemon-reload
+      systemctl enable nexus.service
     user: root
+
+ 
   setup-postgresql-connection:
   - cmd[cp]: |-
-      until [[ -f /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties ]] ; do
-          sleep 1
-          echo '.'
-      done
-      cat >> /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties <<EOF
+      cat >> /opt/sonatype/nexus/etc/nexus.properties <<EOF
 
       # PostgreSQL Database Configuration
       nexus.datastore.enabled=true
@@ -99,8 +88,8 @@ actions:
       nexus.datastore.password=${nodes.sqldb.password}
       nexus.datastore.maximumPoolSize=10
       EOF
-      chown jelastic:jelastic /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
-      chmod 664 /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
+      chmod 664 /opt/sonatype/nexus/etc/nexus.properties
+
   setup-nginx:
   - cmd[cp]: |-
       sed -i 's|index  index.html index.htm index.php;|index  index.html index.htm index.php;\n\n    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;|g' /etc/nginx/conf.d/sites-enabled/default.conf
@@ -112,21 +101,5 @@ actions:
     user: root
   - api [cp]: jelastic.environment.control.RestartNodes
   - cmd [cp]: sleep 10
-
-addons:
-- id: update-nexus
-  name: Update Nexus Repository Manager
-  description: Update of Nexus
-  buttons:
-  - caption: Update
-    action: update
-    loadingText: Updating...
-    confirmText: Do you want to update Nexus?
-    successText: Nexus has been successfully updated!
-  actions:
-    update:
-    - log: launching nexus update JPS
-    - install: https://raw.githubusercontent.com/jelastic-jps/nexus/master/scripts/update-nexus.jps
-      skipEmail: true
 
 success: text/success-email.md
