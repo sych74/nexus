@@ -95,6 +95,8 @@ actions:
       sed -i 's|index  index.html index.htm index.php;|index  index.html index.htm index.php;\n\n    proxy_set_header X-Real-IP $remote_addr;|g' /etc/nginx/conf.d/sites-enabled/default.conf
       sed -i 's|index  index.html index.htm index.php;|index  index.html index.htm index.php;\n\n    proxy_set_header Host $host;|g' /etc/nginx/conf.d/sites-enabled/default.conf
       sed -i 's|index  index.html index.htm index.php;|index  index.html index.htm index.php;\n\n    proxy_pass http://localhost:8081/;|g' /etc/nginx/conf.d/sites-enabled/default.conf
+      systemctl start nexus.service
+    user: root
   - api [cp]: jelastic.environment.control.RestartNodes
   - cmd [cp]: sleep 10
 
