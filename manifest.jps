@@ -2,7 +2,7 @@ type: install
 version: 0.2
 id: nexus
 name: Nexus Repository Manager
-baseUrl: https://raw.githubusercontent.com/sych74/nexus/master/
+baseUrl: https://raw.githubusercontent.com/sych74/nexus/master
 logo: images/Nexus.png
 homepage: https://www.sonatype.com/products/repository-oss
 description: Nexus Repository OSS is an open source repository that supports many
@@ -71,7 +71,7 @@ actions:
       tar xzf /tmp/${NEXUS_TAR} &>> /var/log/run.log
       NEXUS_DIR=$(ls -d nexus-* | head -n 1)
       ln -s /opt/sonatype/$NEXUS_DIR /opt/sonatype/nexus
-      wget /scripts/nexus.service -O /etc/systemd/system/nexus.service
+      wget ${baseUrl}/scripts/nexus.service -O /etc/systemd/system/nexus.service
       systemctl daemon-reload
       systemctl enable nexus.service
     user: root
