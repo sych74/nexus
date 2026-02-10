@@ -2,7 +2,7 @@ type: install
 version: 0.2
 id: nexus
 name: Nexus Repository Manager
-baseUrl: https://raw.githubusercontent.com/jelastic-jps/sych74/master/
+baseUrl: https://raw.githubusercontent.com/sych74/nexus/master/
 logo: images/Nexus.png
 homepage: https://www.sonatype.com/products/repository-oss
 description: Nexus Repository OSS is an open source repository that supports many
@@ -30,6 +30,7 @@ nodes:
 
 onInstall:
 - setup-postgresql
+- install-jdk
 - install-nexus
 - setup-postgresql-connection
 - setup-nginx
@@ -41,22 +42,40 @@ actions:
   setup-postgresql:
   - cmd[${nodes.sqldb.master.id}]: 
       psql -Uwebadmin postgres -c "CREATE DATABASE nexus WITH ENCODING 'UNICODE' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0;"
+  install-jdk:
+  - cmd[cp]: |-
+      if grep -a 'AlmaLinux' /etc/system-release ; then
+        dnf -y install java-17-openjdk-headless &>> /var/log/run.log
+        update-alternatives --remove-all  java-1.8.0-openjdk.x86_64 &>> /var/log/run.log || true
+      else
+        yum -y install java-17-openjdk-headless &>> /var/log/run.log || {
+          wget https://download.java.net/java/GA/jdk17.0.2/dfd4a8d0985749f896bed50d7138ee7f/8/GPL/openjdk-17.0.2_linux-x64_bin.tar.gz
+          tar xf openjdk-17.0.2_linux-x64_bin.tar.gz
+          rm -f  openjdk-17.0.2_linux-x64_bin.tar.gz
+          mv jdk-17.0.2 /opt/
+          echo 'export JAVA_HOME=/opt/jdk-17.0.2' >>/etc/profile.d/jdk17.sh
+          echo 'export PATH=$PATH:$JAVA_HOME/bin' >>/etc/profile.d/jdk17.sh
+          echo /opt/jdk-17.0.2 >> /etc/jelastic/redeploy.conf
+          ln -sf /opt/jdk-17.0.2/bin/java /etc/alternatives/java
+        }
+      fi
+    user: root
   install-nexus:
   - cmd[cp]: |-
-      wget -P /etc/yum.repos.d/ https://repo.sonatype.com/repository/community-hosted/rpm/sonatype-community.repo &>> /var/log/run.log
-      if grep -a 'AlmaLinux' /etc/system-release ; then
-        dnf -y install nexus-repository-manager-${globals.version_nexus} java-17-openjdk-headless --nogpgcheck &>> /var/log/run.log
-        update-alternatives --remove-all  java-1.8.0-openjdk.x86_64 &>> /var/log/run.log
-      else
-        yum -y install nexus-repository-manager-${globals.version_nexus} --nogpgcheck &>> /var/log/run.log
-        wget https://download.java.net/java/GA/jdk17.0.2/dfd4a8d0985749f896bed50d7138ee7f/8/GPL/openjdk-17.0.2_linux-x64_bin.tar.gz
-        tar xf openjdk-17.0.2_linux-x64_bin.tar.gz
-        rm -f  openjdk-17.0.2_linux-x64_bin.tar.gz
-        mv jdk-17.0.2 /opt/
-        echo 'export JAVA_HOME=/opt/jdk-17.0.2' >>/etc/profile.d/jdk17.sh
-        echo 'export PATH=$PATH:$JAVA_HOME/bin' >>/etc/profile.d/jdk17.sh
-        echo /opt/jdk-17.0.2 >> /etc/jelastic/redeploy.conf
-        ln -sf /opt/jdk-17.0.2/bin/java /etc/alternatives/java
+      NEXUS_VERSION="${globals.version_nexus}"
+      NEXUS_TAR="nexus-${NEXUS_VERSION}-linux-x86_64.tar.gz"
+      cd /tmp
+      wget https://download.sonatype.com/nexus/3/${NEXUS_TAR} -O ${NEXUS_TAR} &>> /var/log/run.log
+      if [[ -f ${NEXUS_TAR} ]] ; then
+        cd /opt
+        tar xzf /tmp/${NEXUS_TAR} &>> /var/log/run.log
+        rm -f /tmp/${NEXUS_TAR}
+        NEXUS_DIR=$(ls -d nexus-* | head -n 1)
+        if [[ -n "${NEXUS_DIR}" ]] ; then
+          mv ${NEXUS_DIR} sonatype
+          chown -R jelastic:jelastic /opt/sonatype/nexus
+          chown -R jelastic:jelastic /opt/sonatype/sonatype-work
+        fi
       fi
       echo /opt/sonatype/ >> /etc/jelastic/redeploy.conf
       until [[ -f /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties ]] ; do
@@ -64,7 +83,6 @@ actions:
           echo '.'
       done
       chmod 664 /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
-      usermod -a -G nexus3 jelastic
     user: root
   setup-postgresql-connection:
   - cmd[cp]: |-
@@ -74,16 +92,15 @@ actions:
       done
       cat >> /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties <<EOF
 
-# PostgreSQL Database Configuration
-nexus.datastore.enabled=true
-nexus.datastore.connectionUrl=jdbc:postgresql://sqldb:5432/nexus
-nexus.datastore.username=${nodes.sqldb.user}
-nexus.datastore.password=${nodes.sqldb.password}
-nexus.datastore.maximumPoolSize=10
-EOF
-      chown nexus3:nexus3 /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
+      # PostgreSQL Database Configuration
+      nexus.datastore.enabled=true
+      nexus.datastore.connectionUrl=jdbc:postgresql://sqldb:5432/nexus
+      nexus.datastore.username=${nodes.sqldb.user}
+      nexus.datastore.password=${nodes.sqldb.password}
+      nexus.datastore.maximumPoolSize=10
+      EOF
+      chown jelastic:jelastic /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
       chmod 664 /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
-    user: root
   setup-nginx:
   - cmd[cp]: |-
       sed -i 's|index  index.html index.htm index.php;|index  index.html index.htm index.php;\n\n    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;|g' /etc/nginx/conf.d/sites-enabled/default.conf
@@ -91,10 +108,10 @@ EOF
       sed -i 's|index  index.html index.htm index.php;|index  index.html index.htm index.php;\n\n    proxy_set_header Host $host;|g' /etc/nginx/conf.d/sites-enabled/default.conf
       sed -i 's|index  index.html index.htm index.php;|index  index.html index.htm index.php;\n\n    proxy_pass http://localhost:8081/;|g' /etc/nginx/conf.d/sites-enabled/default.conf
       sed -i 's|\#\s*application-host=.*|application-host=127.0.0.1|' /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
-      chown nexus3:nexus3 /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
+      chown jelastic:jelastic /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
     user: root
   - api [cp]: jelastic.environment.control.RestartNodes
-  - cmd [cp]: sleep 15
+  - cmd [cp]: sleep 10
 
 addons:
 - id: update-nexus
