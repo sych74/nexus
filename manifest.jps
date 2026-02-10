@@ -34,9 +34,6 @@ onInstall:
 - install-nexus
 - setup-postgresql-connection
 - setup-nginx
-- installAddon:
-    id: update-nexus
-    nodeGroup: cp
 
 actions:
   setup-postgresql:
@@ -74,6 +71,7 @@ actions:
       wget ${baseUrl}/scripts/nexus.service -O /etc/systemd/system/nexus.service
       systemctl daemon-reload
       systemctl enable nexus.service
+      chown -R jelastic /opt/sonatype
     user: root
 
  
@@ -88,6 +86,7 @@ actions:
       nexus.datastore.password=${nodes.sqldb.password}
       nexus.datastore.maximumPoolSize=10
       EOF
+      sed -i 's|\#\s*application-host=.*|application-host=127.0.0.1|' /opt/sonatype/nexus/etc/nexus.properties
       chmod 664 /opt/sonatype/nexus/etc/nexus.properties
 
   setup-nginx:
@@ -96,9 +95,6 @@ actions:
       sed -i 's|index  index.html index.htm index.php;|index  index.html index.htm index.php;\n\n    proxy_set_header X-Real-IP $remote_addr;|g' /etc/nginx/conf.d/sites-enabled/default.conf
       sed -i 's|index  index.html index.htm index.php;|index  index.html index.htm index.php;\n\n    proxy_set_header Host $host;|g' /etc/nginx/conf.d/sites-enabled/default.conf
       sed -i 's|index  index.html index.htm index.php;|index  index.html index.htm index.php;\n\n    proxy_pass http://localhost:8081/;|g' /etc/nginx/conf.d/sites-enabled/default.conf
-      sed -i 's|\#\s*application-host=.*|application-host=127.0.0.1|' /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
-      chown jelastic:jelastic /opt/sonatype/sonatype-work/nexus3/etc/nexus.properties
-    user: root
   - api [cp]: jelastic.environment.control.RestartNodes
   - cmd [cp]: sleep 10
 
